@@ -1,1 +1,1 @@
-# SCE_Mamba
+# SCE_Net
