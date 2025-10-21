@@ -1,6 +1,6 @@
 
 from DataLoade import MedSegment
-from SCE_Net import SEC_Net
+from SCE_Net import SCE_Net
 from transform import transform
 import torch.nn as nn
 from torch.utils.data import DataLoader
