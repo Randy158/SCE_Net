@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
-from resnet_factory import get_resnet_backbone
+from Resnet.resnet_factory import get_resnet_backbone
 from functools import partial
 from Mamba import VSSMEncoder
 nonlinearity = partial(F.relu, inplace=True)
@@ -192,4 +192,5 @@ if __name__ == "__main__":
     model = SCE_Net(num_classes=2)
     result = model(x)
     print(result.shape)
+
 
