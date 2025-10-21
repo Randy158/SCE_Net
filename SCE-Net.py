@@ -2,13 +2,11 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
-from model.ce_modules.backbones.resnet.resnet_factory import get_resnet_backbone
+from resnet_factory import get_resnet_backbone
 from functools import partial
-from model.Mamba import VSSMEncoder
+from Mamba import VSSMEncoder
 nonlinearity = partial(F.relu, inplace=True)
 import math
-
-
 
 class DynamicFusion(nn.Module):
     def __init__(self, channel):
@@ -194,3 +192,4 @@ if __name__ == "__main__":
     model = SCE_Net(num_classes=2)
     result = model(x)
     print(result.shape)
+
