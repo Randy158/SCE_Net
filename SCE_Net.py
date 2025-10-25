@@ -5,10 +5,8 @@ import torch.nn.functional as F
 from Resnet.resnet_factory import get_resnet_backbone
 from functools import partial
 from Mamba import VSSMEncoder
-
 nonlinearity = partial(F.relu, inplace=True)
 import math
-
 
 class DynamicFusion(nn.Module):
     def __init__(self, channel):
@@ -22,7 +20,6 @@ class DynamicFusion(nn.Module):
     def forward(self, resnet_feat, vssm_feat):
         gate = self.gate(torch.cat([resnet_feat, vssm_feat], dim=1))
         return gate[:, 0:1] * resnet_feat + gate[:, 1:2] * vssm_feat
-
 
 class EdgeAttention(nn.Module):
     def __init__(self, in_channels):
@@ -77,7 +74,7 @@ class SCE_Net(nn.Module):
         self.encoder2 = resnet.layer2
         self.encoder3 = resnet.layer3
         self.encoder4 = resnet.layer4
-        # filters = [64, 128, 256, 512]
+    
         self.decoder4 = DecoderBlock(512, 256, 256)  # e4 + e3
         self.decoder3 = DecoderBlock(256, 128, 128)  # d4 + e2
         self.decoder2 = DecoderBlock(128, 64, 64)  # d3 + e1
@@ -97,21 +94,21 @@ class SCE_Net(nn.Module):
             nn.Conv2d(3, 48, kernel_size=7, stride=2, padding=3),
             nn.InstanceNorm2d(48, eps=1e-5, affine=True),
         )
-        # Dynamic fusion
+
         self.fusion1 = DynamicFusion(64)
         self.fusion2 = DynamicFusion(128)
         self.fusion3 = DynamicFusion(256)
         self.fusion4 = DynamicFusion(512)
-        # Edge attention module
+ 
         self.edge3 = EdgeAttention(512)
         self.edge2 = EdgeAttention(256)
-        # Before VSS
+   
         self.vss_pre_cnn = nn.Sequential(
             nn.Conv2d(48, 48, kernel_size=3, padding=1),
             nn.BatchNorm2d(48),
             nn.ReLU(inplace=True)
         )
-        # After VSS
+
         self.vss_post_cnn = nn.ModuleList([
             nn.Sequential(
                 nn.Conv2d(48, 48, kernel_size=3, padding=1),
@@ -203,9 +200,4 @@ class DecoderBlockBase(nn.Module):
         return x
 
 
-if __name__ == "__main__":
-    x = torch.randn(8, 3, 512, 640)
-    model = SCE_Net(num_classes=2)
-    result = model(x)
-    print(result.shape)
 
