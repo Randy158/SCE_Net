@@ -31,7 +31,51 @@ class EdgeAttention(nn.Module):
         edge_map = self.sigmoid(self.conv(x))
         return x * edge_map
 
-
+class NonLocalBlock(nn.Module):
+    def __init__(self, in_channels):
+        super(NonLocalBlock, self).__init__()
+        self.in_channels = in_channels
+        self.g = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.theta = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.phi = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+        self.out = nn.Conv2d(in_channels, in_channels, kernel_size=1)
+    def forward(self, x):
+        g = self.g(x)
+        theta = self.theta(x)
+        phi = self.phi(x)
+        attn_map = torch.matmul(theta.flatten(2).transpose(1, 2), phi.flatten(2))
+        attn_map = F.softmax(attn_map, dim=-1)
+        attn_map = attn_map.transpose(1, 2)
+        out = torch.matmul(attn_map, g.flatten(2))
+        out = out.view_as(x)
+class LightweightSPDACblock(nn.Module):
+    def __init__(self, in_channels):
+        super(LightweightSPDACblock, self).__init__()
+        # 1. Depthwise Separable Convolutions: reduce parameter count and computation.
+        self.depthwise_conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1, groups=in_channels, bias=False)
+        self.pointwise_conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
+        self.depthwise_conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=2, dilation=2, groups=in_channels, bias=False)
+        self.pointwise_conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
+        self.depthwise_conv3 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=3, dilation=3, groups=in_channels, bias=False)
+        self.pointwise_conv3 = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
+        # 2. Simplified Pooling
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool2 = nn.MaxPool2d(kernel_size=3, stride=3)
+        # 3. Output convolution to fuse the features
+        #self.conv_output = nn.Conv2d(in_channels * 6, in_channels, kernel_size=1)
+        self.conv_output = nn.Conv2d(3072, in_channels, kernel_size=1)
+    def forward(self, x):
+        # Depthwise convolutions for feature extraction
+        x1 = F.relu(self.pointwise_conv1(self.depthwise_conv1(x)))
+        x2 = F.relu(self.pointwise_conv2(self.depthwise_conv2(x)))
+        x3 = F.relu(self.pointwise_conv3(self.depthwise_conv3(x)))
+        h, w = x.size(2), x.size(3)
+        pooled1 = F.interpolate(self.pool1(x), size=(h, w), mode='bilinear', align_corners=True)  # Fix size mismatch
+        pooled2 = F.interpolate(self.pool2(x), size=(h, w), mode='bilinear', align_corners=True)  # Fix size mismatch
+        # Concatenate all the features (original + depthwise convolutions + pooling)
+        out = torch.cat([x, x1, x2, x3, pooled1, pooled2], 1)
+        out = self.conv_output(out)
+        return out
 class DecoderBlock(nn.Module):
     def __init__(self, in_channels, skip_channels, out_channels):
         super(DecoderBlock, self).__init__()
@@ -198,6 +242,7 @@ class DecoderBlockBase(nn.Module):
         x = self.norm3(x)
         x = self.relu3(x)
         return x
+
 
 
 
