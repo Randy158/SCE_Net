@@ -476,19 +476,3 @@ def load_pretrained_ckpt(
 
     return model
 
-# model = SwinUMamba(
-#     in_chans=3,
-#     out_chans=6,
-#     feat_size=[48, 96, 192, 384, 768],
-#     deep_supervision=True,
-#     hidden_size=768,
-# )
-# model = load_pretrained_ckpt(model)
-
-# params = 0
-# for name, param in model.named_parameters():
-#     params += param.nelement()
-# print(params)
-
-# data = torch.randn(2,3,256,256).to("cuda")
-# print(model(data).shape)
