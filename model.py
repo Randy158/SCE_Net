@@ -199,7 +199,7 @@ class SCE_Net(nn.Module):
         e2 = self.encoder2(e1)
         e3 = self.encoder3(e2)
         e4 = self.encoder4(e3)
-        # Dynamic fusion
+        # Dynamic fusion    
         e1 = self.fusion1(e1, v1)
         e2 = self.fusion2(e2, v2)
         e3 = self.fusion3(e3, v3)
@@ -242,6 +242,7 @@ class DecoderBlockBase(nn.Module):
         x = self.norm3(x)
         x = self.relu3(x)
         return x
+
 
 
 
