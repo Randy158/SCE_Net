@@ -4,7 +4,7 @@ from torchvision import models
 import torch.nn.functional as F
 from Resnet.resnet_factory import get_resnet_backbone
 from functools import partial
-from Mamba import VSSMEncoder
+from model.Mamba import VSSMEncoder
 nonlinearity = partial(F.relu, inplace=True)
 import math
 
