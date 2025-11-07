@@ -1,7 +1,6 @@
-
-from DataLoade import MedSegment
-from model import SCE_Net
-from transform import transform
+from utils.DataLoade import MedSegment
+from model.net import SCE_Net
+from utils.transform import transform
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import os
@@ -10,7 +9,6 @@ from Train_model import train
 
 if __name__ == "__main__":
     
-
     train_img_dir = ""
     train_label_dir = ""
     val_img_dir = ""
@@ -32,7 +30,17 @@ if __name__ == "__main__":
     net = SCE_Net(num_classes=classes_num)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-4, weight_decay=1e-4)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=400, eta_min=1e-5)
+
+    lr_scheduler_choice = "Exponential"  
+    if lr_scheduler_choice == "Cosine":
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=400, eta_min=1e-5)
+    elif lr_scheduler_choice == "Step":
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
+    elif lr_scheduler_choice == "Exponential":
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    else:
+        print("Invalid lr_scheduler_choice, using default CosineAnnealingLR.")
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=400, eta_min=1e-5)
 
     criterion = nn.CrossEntropyLoss()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -40,5 +48,4 @@ if __name__ == "__main__":
     net.to(device)
     criterion = criterion.to(device)
 
-    train(net, train_dataloader, val_dataloader, epoch, criterion, optimizer, log_dir, model_save_dir,
-           device, lr_scheduler)
+    train(net, train_dataloader, val_dataloader, epoch, criterion, optimizer, log_dir, model_save_dir, device, lr_scheduler)
