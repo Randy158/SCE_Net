@@ -11,8 +11,7 @@ def train(net, train_dataloader, val_dataloader, epoch, criterion, optimizer, lo
     columns = ['epoch', 'train_loss', 'val_loss']
     result_df = pd.DataFrame(columns=columns)
     for e in range(epoch):
-        if scheduler is not None:
-            scheduler.step()
+       
         net.train()
         train_loss = 0.0
         for i, batchdata in tqdm(enumerate(train_dataloader)):
@@ -22,6 +21,8 @@ def train(net, train_dataloader, val_dataloader, epoch, criterion, optimizer, lo
             optimizer.zero_grad()
             scaler.scale(loss).backward()
             optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
             train_loss += loss.cpu().item() * batchlabel.size(0)
         train_loss /= len(train_dataloader.dataset)
         print(f'\nepoch:{e+1}, train_loss:{train_loss:.4f}')
