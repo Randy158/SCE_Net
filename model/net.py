@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
-from resnet.resnet_factory import get_resnet_backbone
+from resnet.resnet_architecture import get_resnet_backbone
 from functools import partial
 from model.Mamba import VSSMEncoder
 nonlinearity = partial(F.relu, inplace=True)
