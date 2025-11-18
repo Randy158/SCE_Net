@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from .basic_module import BasicBlock, Bottleneck, BN_MOMENTUM
+from .core import BasicBlock, Bottleneck, BN_MOMENTUM
 
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
