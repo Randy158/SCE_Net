@@ -1,11 +1,11 @@
 # *coding:utf-8 *
 
 
-from resnet.build_resnet import get_resnet_18
-from resnet.build_resnet import get_resnet_34
-from resnet.build_resnet import get_resnet_50
-from resnet.build_resnet import get_resnet_101
-from resnet.build_resnet import get_resnet_152
+from .resnet_architecture import get_resnet_18
+from .resnet_architecture import get_resnet_34
+from .resnet_architecture import get_resnet_50
+from .resnet_architecture import get_resnet_101
+from .resnet_architecture import get_resnet_152
 
 _resnet_backbone = {
     'resnet18': get_resnet_18,
