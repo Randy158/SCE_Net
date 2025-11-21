@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
-from resnet import create_resnet
+from model.resnet import create_resnet
 from functools import partial
 from model.Mamba import VSSE
 nonlinearity = partial(F.relu, inplace=True)
