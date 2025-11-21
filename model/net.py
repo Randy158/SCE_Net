@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
-from resnet.resnet_architecture import get_resnet_backbone
+from resnet import create_resnet
 from functools import partial
 from model.Mamba import VSSMEncoder
 nonlinearity = partial(F.relu, inplace=True)
@@ -61,7 +61,7 @@ class SCE_Net(nn.Module):
     def __init__(self, num_classes=1):
         super().__init__()
         filters = [64, 128, 256, 512]
-        resnet = get_resnet_backbone('resnet34')(pretrain=True)
+        resnet = create_resnet('resnet34', pretrain=True)
         self.firstconv = resnet.conv1
         self.firstbn = resnet.bn1
         self.firstrelu = resnet.relu
