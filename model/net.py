@@ -4,7 +4,7 @@ from torchvision import models
 import torch.nn.functional as F
 from resnet import create_resnet
 from functools import partial
-from model.Mamba import VSSMEncoder
+from model.Mamba import VSSE
 nonlinearity = partial(F.relu, inplace=True)
 import math
 
@@ -85,7 +85,7 @@ class SCE_Net(nn.Module):
         self.finalrelu2 = nonlinearity
         self.finalconv3 = nn.Conv2d(32, num_classes, 3, padding=1)
         self.conv = nn.Conv2d(1, 3, kernel_size=1, stride=1)
-        self.vssm_encoder = VSSMEncoder(patch_size=2, in_chans=48)
+        self.vssm_encoder = VSSE(patch_size=2, in_chans=48)
         self.stem = nn.Sequential(
             nn.Conv2d(3, 48, kernel_size=7, stride=2, padding=3),
             nn.InstanceNorm2d(48, eps=1e-5, affine=True),
