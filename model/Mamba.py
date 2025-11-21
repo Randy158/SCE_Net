@@ -547,7 +547,7 @@ class VSSE(nn.Module):
         outputs = [x]  
 
         # First step: Patch embedding
-        patch_embeddings = self.patch_embed(x_input)
+        patch_embeddings = self.patch_embed(x)
     
         # Apply absolute positional embedding if it's enabled
         if self.ape:
