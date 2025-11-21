@@ -1,11 +1,9 @@
-
-import re
-import time
-import math
 import numpy as np
 from functools import partial
 from typing import Optional, Union, Type, List, Tuple, Callable, Dict
-
+import re
+import time
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,7 +13,124 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 
 DropPath.__repr__ = lambda self: f"timm.DropPath({self.drop_prob})"
+def flops_selective_scan_ref(B=1, L=256, D=768, N=16, with_D=True, with_Z=False, with_Group=True, with_complex=False):
+    """
+    u: r(B D L)
+    delta: r(B D L)
+    A: r(D N)
+    B: r(B N L)
+    C: r(B N L)
+    D: r(D)
+    z: r(B D L)
+    delta_bias: r(D), fp32
+    
+    ignores:
+        [.float(), +, .softplus, .shape, new_zeros, repeat, stack, to(dtype), silu] 
+    """
+    import numpy as np
+    
+    # fvcore.nn.jit_handles
+    def get_flops_einsum(input_shapes, equation):
+        np_arrs = [np.zeros(s) for s in input_shapes]
+        optim = np.einsum_path(equation, *np_arrs, optimize="optimal")[1]
+        for line in optim.split("\n"):
+            if "optimized flop" in line.lower():
+                # divided by 2 because we count MAC (multiply-add counted as one flop)
+                flop = float(np.floor(float(line.split(":")[-1]) / 2))
+                return flop
+    
 
+    assert not with_complex
+
+    flops = 0 # below code flops = 0
+    if False:
+        ...
+        """
+        dtype_in = u.dtype
+        u = u.float()
+        delta = delta.float()
+        if delta_bias is not None:
+            delta = delta + delta_bias[..., None].float()
+        if delta_softplus:
+            delta = F.softplus(delta)
+        batch, dim, dstate = u.shape[0], A.shape[0], A.shape[1]
+        is_variable_B = B.dim() >= 3
+        is_variable_C = C.dim() >= 3
+        if A.is_complex():
+            if is_variable_B:
+                B = torch.view_as_complex(rearrange(B.float(), "... (L two) -> ... L two", two=2))
+            if is_variable_C:
+                C = torch.view_as_complex(rearrange(C.float(), "... (L two) -> ... L two", two=2))
+        else:
+            B = B.float()
+            C = C.float()
+        x = A.new_zeros((batch, dim, dstate))
+        ys = []
+        """
+
+    flops += get_flops_einsum([[B, D, L], [D, N]], "bdl,dn->bdln")
+    if with_Group:
+        flops += get_flops_einsum([[B, D, L], [B, N, L], [B, D, L]], "bdl,bnl,bdl->bdln")
+    else:
+        flops += get_flops_einsum([[B, D, L], [B, D, N, L], [B, D, L]], "bdl,bdnl,bdl->bdln")
+    if False:
+        ...
+        """
+        deltaA = torch.exp(torch.einsum('bdl,dn->bdln', delta, A))
+        if not is_variable_B:
+            deltaB_u = torch.einsum('bdl,dn,bdl->bdln', delta, B, u)
+        else:
+            if B.dim() == 3:
+                deltaB_u = torch.einsum('bdl,bnl,bdl->bdln', delta, B, u)
+            else:
+                B = repeat(B, "B G N L -> B (G H) N L", H=dim // B.shape[1])
+                deltaB_u = torch.einsum('bdl,bdnl,bdl->bdln', delta, B, u)
+        if is_variable_C and C.dim() == 4:
+            C = repeat(C, "B G N L -> B (G H) N L", H=dim // C.shape[1])
+        last_state = None
+        """
+    
+    in_for_flops = B * D * N   
+    if with_Group:
+        in_for_flops += get_flops_einsum([[B, D, N], [B, D, N]], "bdn,bdn->bd")
+    else:
+        in_for_flops += get_flops_einsum([[B, D, N], [B, N]], "bdn,bn->bd")
+    flops += L * in_for_flops 
+    if False:
+        ...
+        """
+        for i in range(u.shape[2]):
+            x = deltaA[:, :, i] * x + deltaB_u[:, :, i]
+            if not is_variable_C:
+                y = torch.einsum('bdn,dn->bd', x, C)
+            else:
+                if C.dim() == 3:
+                    y = torch.einsum('bdn,bn->bd', x, C[:, :, i])
+                else:
+                    y = torch.einsum('bdn,bdn->bd', x, C[:, :, :, i])
+            if i == u.shape[2] - 1:
+                last_state = x
+            if y.is_complex():
+                y = y.real * 2
+            ys.append(y)
+        y = torch.stack(ys, dim=2) # (batch dim L)
+        """
+
+    if with_D:
+        flops += B * D * L
+    if with_Z:
+        flops += B * D * L
+    if False:
+        ...
+        """
+        out = y if D is None else y + u * rearrange(D, "d -> d 1")
+        if z is not None:
+            out = out * F.silu(z)
+        out = out.to(dtype=dtype_in)
+        """
+    
+    return flops
+    
 class PatchEmbed2D(nn.Module):
     r""" Image to Patch Embedding
     Args:
@@ -357,7 +472,7 @@ class VSSLayer(nn.Module):
         return x
 
 
-class VSSMEncoder(nn.Module):
+class VSSE(nn.Module):
     def __init__(self, patch_size=4, in_chans=3, depths=[2, 2, 9, 2],
                  dims=[64, 128, 256, 512], d_state=16, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.2,
                  norm_layer=nn.LayerNorm, patch_norm=True,
@@ -429,22 +544,29 @@ class VSSMEncoder(nn.Module):
         return {'relative_position_bias_table'}
 
     def forward(self, x):
-        x_ret = []
-        x_ret.append(x)
+        # Initialize a list to store results at different stages
+        outputs = [x_input]  
 
-        x = self.patch_embed(x)
+        # First step: Patch embedding
+        patch_embeddings = self.patch_embed(x_input)
+    
+        # Apply absolute positional embedding if it's enabled
         if self.ape:
-            x = x + self.absolute_pos_embed
-        x = self.pos_drop(x)
+            patch_embeddings += self.absolute_pos_embed  # Add position information
+    
+        # Dropout for positional encoding
+        patch_embeddings = self.pos_drop(patch_embeddings)
 
-        for s, layer in enumerate(self.layers):
-            x = layer(x)
-            x_ret.append(x.permute(0, 3, 1, 2))
-            if s < len(self.downsamples):
-                x = self.downsamples[s](x)
-
-        return x_ret
-
+        # Iterate through each layer, apply the VSS operation and downsample if needed
+        for idx, layer in enumerate(self.layers):
+            patch_embeddings = layer(patch_embeddings)  
+            outputs.append(patch_embeddings.permute(0, 3, 1, 2)) 
+        
+            # Apply downsampling if this is not the last layer
+            if idx < len(self.downsamples):
+                patch_embeddings = self.downsamples[idx](patch_embeddings)  
+        return outputs
+       
 
 def load_pretrained_ckpt(
         model,
@@ -477,120 +599,4 @@ def load_pretrained_ckpt(
 
     return model
 
-def flops_selective_scan_ref(B=1, L=256, D=768, N=16, with_D=True, with_Z=False, with_Group=True, with_complex=False):
-    """
-    u: r(B D L)
-    delta: r(B D L)
-    A: r(D N)
-    B: r(B N L)
-    C: r(B N L)
-    D: r(D)
-    z: r(B D L)
-    delta_bias: r(D), fp32
-    
-    ignores:
-        [.float(), +, .softplus, .shape, new_zeros, repeat, stack, to(dtype), silu] 
-    """
-    import numpy as np
-    
-    # fvcore.nn.jit_handles
-    def get_flops_einsum(input_shapes, equation):
-        np_arrs = [np.zeros(s) for s in input_shapes]
-        optim = np.einsum_path(equation, *np_arrs, optimize="optimal")[1]
-        for line in optim.split("\n"):
-            if "optimized flop" in line.lower():
-                # divided by 2 because we count MAC (multiply-add counted as one flop)
-                flop = float(np.floor(float(line.split(":")[-1]) / 2))
-                return flop
-    
 
-    assert not with_complex
-
-    flops = 0 # below code flops = 0
-    if False:
-        ...
-        """
-        dtype_in = u.dtype
-        u = u.float()
-        delta = delta.float()
-        if delta_bias is not None:
-            delta = delta + delta_bias[..., None].float()
-        if delta_softplus:
-            delta = F.softplus(delta)
-        batch, dim, dstate = u.shape[0], A.shape[0], A.shape[1]
-        is_variable_B = B.dim() >= 3
-        is_variable_C = C.dim() >= 3
-        if A.is_complex():
-            if is_variable_B:
-                B = torch.view_as_complex(rearrange(B.float(), "... (L two) -> ... L two", two=2))
-            if is_variable_C:
-                C = torch.view_as_complex(rearrange(C.float(), "... (L two) -> ... L two", two=2))
-        else:
-            B = B.float()
-            C = C.float()
-        x = A.new_zeros((batch, dim, dstate))
-        ys = []
-        """
-
-    flops += get_flops_einsum([[B, D, L], [D, N]], "bdl,dn->bdln")
-    if with_Group:
-        flops += get_flops_einsum([[B, D, L], [B, N, L], [B, D, L]], "bdl,bnl,bdl->bdln")
-    else:
-        flops += get_flops_einsum([[B, D, L], [B, D, N, L], [B, D, L]], "bdl,bdnl,bdl->bdln")
-    if False:
-        ...
-        """
-        deltaA = torch.exp(torch.einsum('bdl,dn->bdln', delta, A))
-        if not is_variable_B:
-            deltaB_u = torch.einsum('bdl,dn,bdl->bdln', delta, B, u)
-        else:
-            if B.dim() == 3:
-                deltaB_u = torch.einsum('bdl,bnl,bdl->bdln', delta, B, u)
-            else:
-                B = repeat(B, "B G N L -> B (G H) N L", H=dim // B.shape[1])
-                deltaB_u = torch.einsum('bdl,bdnl,bdl->bdln', delta, B, u)
-        if is_variable_C and C.dim() == 4:
-            C = repeat(C, "B G N L -> B (G H) N L", H=dim // C.shape[1])
-        last_state = None
-        """
-    
-    in_for_flops = B * D * N   
-    if with_Group:
-        in_for_flops += get_flops_einsum([[B, D, N], [B, D, N]], "bdn,bdn->bd")
-    else:
-        in_for_flops += get_flops_einsum([[B, D, N], [B, N]], "bdn,bn->bd")
-    flops += L * in_for_flops 
-    if False:
-        ...
-        """
-        for i in range(u.shape[2]):
-            x = deltaA[:, :, i] * x + deltaB_u[:, :, i]
-            if not is_variable_C:
-                y = torch.einsum('bdn,dn->bd', x, C)
-            else:
-                if C.dim() == 3:
-                    y = torch.einsum('bdn,bn->bd', x, C[:, :, i])
-                else:
-                    y = torch.einsum('bdn,bdn->bd', x, C[:, :, :, i])
-            if i == u.shape[2] - 1:
-                last_state = x
-            if y.is_complex():
-                y = y.real * 2
-            ys.append(y)
-        y = torch.stack(ys, dim=2) # (batch dim L)
-        """
-
-    if with_D:
-        flops += B * D * L
-    if with_Z:
-        flops += B * D * L
-    if False:
-        ...
-        """
-        out = y if D is None else y + u * rearrange(D, "d -> d 1")
-        if z is not None:
-            out = out * F.silu(z)
-        out = out.to(dtype=dtype_in)
-        """
-    
-    return flops
