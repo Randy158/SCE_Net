@@ -544,8 +544,7 @@ class VSSE(nn.Module):
         return {'relative_position_bias_table'}
 
     def forward(self, x):
-        # Initialize a list to store results at different stages
-        outputs = [x_input]  
+        outputs = [x]  
 
         # First step: Patch embedding
         patch_embeddings = self.patch_embed(x_input)
